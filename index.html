@@ -378,7 +378,7 @@ function applyFilter(){
         img.setAttribute('crossOrigin', 'anonymous'); 
         
         // 替換為您的圖片 URL
-        img.src = "https://chy0205.github.io/1110/120104.jpg";
+        img.src = "https://chy0205.github.io/1110/120106.jpg";
         img.onerror = () => { console.error('Image failed to load'); img.src = 'https://placehold.co/720x1280/eeeeee/333333?text=背景圖載入失敗'; };
         itemDiv.appendChild(img);
 
@@ -405,7 +405,7 @@ function applyFilter(){
         const namePrefix = name ? `${indent4}${name}|` : "";
 
         // 設定每行最大字數，避免超出直式高度
-        const maxCharsPerLine = 23; 
+        const maxCharsPerLine = 21; 
         const wrappedContent = forceVerticalLineBreak(content, maxCharsPerLine);
         const lines = wrappedContent.split("\n");
 
@@ -537,3 +537,4 @@ async function downloadAllImages(){
 </script>
 </body>
 </html>
+
