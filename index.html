@@ -80,6 +80,7 @@ select, button {
     border: none; 
     border-radius: 0;
     overflow: hidden; /* 確保內容在截圖邊界內 */
+    background-color: #fff; /* 預設白色背景，防止圖片載入失敗時透明 */
 }
 
 /* 背景圖片樣式 */
@@ -113,7 +114,7 @@ select, button {
     font-family: "標楷體", "DFKai-SB", "KaiTi", 'Noto Serif TC', serif;
     font-size: 32px; /* 基礎字體大小 */
     line-height: 1.2; /* 行距 (控制字行之間的垂直距離) */
-    letter-spacing: 10px; /* 基礎字元間距 (控制字元間的水平距離) */
+    letter-spacing: 13px; /* 基礎字元間距 (控制字元間的水平距離) */
     white-space: pre-wrap; /* 允許文字保留原始換行符 (\n) 且自動換行 */
     word-break: break-word; /* 允許長單詞或連續字符在任何位置斷開 */
 
@@ -126,6 +127,7 @@ select, button {
 .small-text {
     font-size: 20px;
     font-family: "標楷體", "DFKai-SB", "KaiTi", 'Noto Serif TC', serif;
+    white-space: nowrap;
 }
 
 /* 專門用於對齊的 span 元素，需要設定 display: inline-block 才能應用 letter-spacing */
@@ -224,6 +226,8 @@ select, button {
 
 // Google Apps Script 部署的 URL，用於從 Google Sheets 獲取 JSON 資料
 const GS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzPsok1XF4E4PQEmckvxK3pY8GPI1GeTrceC5Oz5deQbDMvmgtJxd1e-WcIV4GjgxZV3g/exec';
+// 背景圖片的原始網址
+const BG_IMAGE_URL = 'https://chy0205.github.io/1110/1201.png';
 
 // 欄位名稱映射表，用於從下拉選單的值對應到 JSON 資料的鍵
 const fieldMap = {
@@ -233,14 +237,16 @@ const fieldMap = {
 
 let globalSheetData = null; // 儲存從試算表載入的所有資料
 let downloadableItems = []; // 儲存所有待下載的圖片元素和檔名資訊
-// 獲取 DOM 元素實例，方便後續操作
+// 儲存已轉換為 Base64 的背景圖，避免重複下載
+let cachedBgBase64 = null; 
+
 const messageBox = document.getElementById('messageBox');
 const resultsContainer = document.getElementById('resultsContainer');
 const downloadAllBtn = document.getElementById('downloadAllBtn');
 
 // ★ 字元對齊和間距相關常數 - 這是直式標題對齊的核心 ★
-const CHAR_FONT_SIZE_PX = 34; // 內容區塊的字體大小 (用於計算視覺空間)
-const BASE_LETTER_SPACING_PX = 10; // CSS 中 .content-block 設定的基礎字距
+const CHAR_FONT_SIZE_PX = 32; // 內容區塊的字體大小 (用於計算視覺空間)
+const BASE_LETTER_SPACING_PX = 13; // CSS 中 .content-block 設定的基礎字距
 // 一個字元在直式書寫中佔用的視覺空間 (字體大小 + 基礎字距)
 const VISUAL_CHAR_UNIT_PX = CHAR_FONT_SIZE_PX + BASE_LETTER_SPACING_PX; // 44px
 const ALIGN_MIN_TARGET_LEN = 15; // 當兩行標題都太短時，預設對齊的最小目標長度
@@ -248,26 +254,51 @@ const ALIGN_MIN_TARGET_LEN = 15; // 當兩行標題都太短時，預設對齊�
 
 /**
  * 顯示訊息給使用者
- * @param {string} msg 訊息內容
- * @param {boolean} isError 是否為錯誤訊息 (決定顏色)
  */
 function displayMessage(msg, isError=false){
     messageBox.textContent = msg;
-    // 根據是否為錯誤來設定訊息顏色
     messageBox.style.color = isError ? 'red':'green';
 }
-// 清除訊息
 function hideMessage(){ messageBox.textContent=''; }
 
 /**
+ * 預先載入背景圖片並轉換為 Base64 DataURL。
+ * 這能解決大部分手機或瀏覽器在截圖時因為 CORS (跨域) 問題導致背景空白的情況。
+ */
+async function preloadBackground() {
+    if (cachedBgBase64) return cachedBgBase64;
+    
+    try {
+        console.log("開始下載背景圖並轉換...");
+        // 使用 fetch 抓取圖片
+        const response = await fetch(BG_IMAGE_URL, { mode: 'cors' });
+        if (!response.ok) throw new Error("Network response was not ok");
+        
+        const blob = await response.blob();
+        
+        // 將 Blob 轉為 Base64 字串
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                cachedBgBase64 = reader.result;
+                console.log("背景圖轉換成功");
+                resolve(reader.result);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        console.warn("無法轉換背景圖為 Base64 (可能是跨域限制)，將退回使用原始網址。", e);
+        // 如果轉換失敗，退回使用原始網址，至少讓瀏覽器嘗試載入
+        return BG_IMAGE_URL;
+    }
+}
+
+/**
  * 針對直式書寫強制斷行，防止內容超出單行垂直空間 (圖片的高度)。
- * @param {string} text 原始文字
- * @param {number} maxCharsPerLine 每行最大字數 (根據 1280px 高度估算，調整此值可改變每列的字數)
- * @returns {string} 處理後的帶有換行符的文字
  */
 function forceVerticalLineBreak(text, maxCharsPerLine=21) { 
     if (!text) return '';
-    // 將輸入文字按原始換行符 (\n) 分割成行
     const originalLines = text.split('\n');
     let processedLines = [];
     
@@ -275,84 +306,61 @@ function forceVerticalLineBreak(text, maxCharsPerLine=21) {
         if (line.length > maxCharsPerLine) {
             let tempLine = '';
             let lineChunks = [];
-            // 逐字檢查，如果達到最大長度則強制換行
             for (let i = 0; i < line.length; i++) {
                 const char = line[i];
                 if (tempLine.length === maxCharsPerLine) {
-                    lineChunks.push(tempLine); // 推入已滿的一行
-                    tempLine = char; // 將當前字元作為新行的開頭
+                    lineChunks.push(tempLine);
+                    tempLine = char;
                 } else {
                     tempLine += char;
                 }
             }
-            if (tempLine.length > 0) lineChunks.push(tempLine); // 推入最後一行
-            // 將過長的行以換行符 (\n) 串接，使其在直式書寫中換到下一列
+            if (tempLine.length > 0) lineChunks.push(tempLine);
             processedLines.push(lineChunks.join('\n'));
         } else {
-            // 不足長度的行保持不變
             processedLines.push(line);
         }
     }
-    // 將所有行以換行符串接回單一字串
     return processedLines.join('\n');
 }
 
 /**
  * 根據最長行調整字元間距，以達到視覺上的垂直對齊 (長度一致)。
- * @param {string} text 要調整的文字內容 (日期或仙佛行)。
- * @param {number} targetLen 目標長度 (字元數)。
- * @returns {string} 包含 inline style 的 <span> HTML 字串或原始文字。
  */
 function generateAlignedSpan(text, targetLen) {
     if (!text || text.trim().length === 0) return text;
     const currentLen = text.length;
+    if (currentLen >= targetLen) return text;
 
-    // 判斷是否需要進行間距擴展
-    if (currentLen >= targetLen) {
-        return text; // 長度足夠或超過目標，直接回傳原始文字
-    }
-
-    // 計算需要補足多少個「字元單位」的長度 (即字元差)
     const neededCharUnits = targetLen - currentLen;
-    // 計算總共需要的額外像素空間 (字元差 * 每個字元的視覺單位)
     const totalExtraSpaceNeededPx = neededCharUnits * VISUAL_CHAR_UNIT_PX;
-    
-    const numGaps = currentLen - 1; // 間隙數量 = 字數 - 1 (n個字有n-1個間隙)
-
+    const numGaps = currentLen - 1;
     let finalSpan = text;
 
     if (numGaps > 0) {
-        // 將總額外空間平均分配到每個間隙中
         const extraSpacingPerGap = totalExtraSpaceNeededPx / numGaps;
-        // 新的 letter-spacing = 基礎間距 (10px) + 每個間隙的額外間距
         const totalSpacing = BASE_LETTER_SPACING_PX + extraSpacingPerGap;
-        
-        // 將文字包裝在 span 內，並應用計算出的 letter-spacing
         finalSpan = `<span style="letter-spacing:${totalSpacing.toFixed(2)}px;">${text}</span>`;
     } else if (currentLen === 1) {
-        // 如果只有一個字，無法調整間距 (numGaps=0)，改為用全形空白補足長度
         finalSpan = text + '　'.repeat(neededCharUnits); 
     }
     
     return finalSpan;
 }
 
-
 /**
  * 異步獲取試算表資料，並更新 UI 狀態
  */
 async function fetchSheetData(){
     const selectElement = document.getElementById('filterValueSelect');
-    // 顯示載入狀態
     selectElement.innerHTML = '<option>載入中...</option>';
     selectElement.disabled = true;
     resultsContainer.innerHTML = '<p>資料載入中，請稍候...</p>';
     hideMessage();
     try {
-        // 使用 fetch 發送 HTTP 請求獲取 JSON 資料
         const res = await fetch(GS_SCRIPT_URL);
         const data = await res.json();
-        globalSheetData = data; // 儲存全域資料
+        globalSheetData = data;
         displayMessage('資料載入成功');
         return data;
     } catch (e) {
@@ -364,8 +372,6 @@ async function fetchSheetData(){
 
 /**
  * 根據選定的欄位填充篩選值下拉選單
- * @param {Array<Object>} data 試算表資料
- * @param {string} fieldKey 欄位名稱
  */
 function populateFilterValues(data, fieldKey){
     const selectElement = document.getElementById('filterValueSelect');
@@ -376,45 +382,40 @@ function populateFilterValues(data, fieldKey){
         return;
     }
 
-    // 使用 Set 確保篩選值不重複
     const uniqueValues = new Set();
     data.forEach(row=>{
         const val = row[fieldKey];
         if(val) uniqueValues.add(val.toString().trim());
     });
     
-    // 按中文排序 (使用 localeCompare 搭配 'zh-TW' 參數確保正確的中文排序)
     const sorted = Array.from(uniqueValues).sort((a,b)=>a.localeCompare(b,'zh-TW'));
 
-    // 增加預設選項
     const def = document.createElement('option');
     def.value=''; def.textContent='--- 請選擇 ---';
     selectElement.appendChild(def);
 
-    // 填充所有唯一值到下拉選單
     sorted.forEach(v=>{
         const o=document.createElement('option');
         o.value=v; o.textContent=v;
         selectElement.appendChild(o);
     });
 
-    selectElement.disabled=false; // 載入完成後啟用下拉選單
+    selectElement.disabled=false;
 }
 
 // 頁面載入後初始化
 document.addEventListener('DOMContentLoaded', async()=>{
+    // 預先偷偷開始載入背景圖，加快稍後的速度
+    preloadBackground(); 
+
     const initializeData = async () => {
-        // 如果資料未載入，則從遠端獲取
         if(!globalSheetData) await fetchSheetData();
-        // 預設填充「班期」的篩選值
         if (globalSheetData) {
             populateFilterValues(globalSheetData, fieldMap["班期"]);
         }
     };
-
     await initializeData();
     
-    // 監聽篩選欄位變更，當使用者切換欄位時，重新填充對應的篩選值
     document.getElementById('filterField').addEventListener('change', (event)=>{ 
         populateFilterValues(globalSheetData, fieldMap[event.target.value]);
     });
@@ -422,14 +423,14 @@ document.addEventListener('DOMContentLoaded', async()=>{
 
 /**
  * 執行篩選並生成圖片預覽
+ * 注意：這裡改為 async 函式，因為要等待圖片轉換
  */
-function applyFilter(){
+async function applyFilter(){
     const fieldSelect=document.getElementById('filterField');
     const valueSelect=document.getElementById('filterValueSelect');
-    const filterKey=fieldMap[fieldSelect.value]; // 取得實際的資料欄位名稱 (例如 "班期")
-    const filterValue=valueSelect.value.trim().toLowerCase(); // 取得篩選值並轉小寫
+    const filterKey=fieldMap[fieldSelect.value];
+    const filterValue=valueSelect.value.trim().toLowerCase();
 
-    // 重設狀態
     resultsContainer.innerHTML='';
     downloadableItems=[];
     downloadAllBtn.disabled=true;
@@ -438,40 +439,40 @@ function applyFilter(){
     if(!globalSheetData){ displayMessage('資料尚未載入',true); return; }
     if(!filterValue){ displayMessage('請選擇篩選值',true); return; }
 
-    // 根據使用者選擇的欄位和值進行資料篩選
     const filtered = globalSheetData.filter(row=>{
         const v=row[filterKey];
-        // 確保值存在、轉字串、去除空白並轉小寫後與篩選值比對
         return v && v.toString().trim().toLowerCase() === filterValue; 
     });
 
-    // 處理無資料的情況
     if(filtered.length===0){
         displayMessage('找不到符合資料');
         resultsContainer.innerHTML=`<p>無資料：${valueSelect.value}</p>`;
         return;
     }
 
-    displayMessage(`找到 ${filtered.length} 筆資料`);
-    downloadAllBtn.disabled=false; // 找到資料後啟用下載全部按鈕
+    displayMessage('正在準備圖片資源...');
+    
+    // ★ 關鍵步驟：確保背景圖片已轉換為 Base64
+    const bgSrc = await preloadBackground();
 
-    // 遍歷所有篩選後的資料，並為每一筆生成一個預覽區塊
+    displayMessage(`找到 ${filtered.length} 筆資料`);
+    downloadAllBtn.disabled=false;
+
     filtered.forEach((row, index)=>{
         const itemDiv = document.createElement("div");
         itemDiv.className = "result-item";
-        itemDiv.id = `item-${index}`; // 給予唯一 ID 方便截圖
+        itemDiv.id = `item-${index}`;
 
         /* 圖片（背景圖） */
         const img = document.createElement("img");
         img.className = "result-img";
-        // 設置 crossorigin 屬性，允許跨域圖片被 html-to-image 處理
-        img.setAttribute('crossOrigin', 'anonymous'); 
+        img.setAttribute('crossOrigin', 'anonymous'); // 保持這個，雙重保險
         
-        // 設置背景圖片 URL
-        img.src = "https://chy0205.github.io/1110/1201.png";
-        // 圖片載入失敗時的備用圖
+        // ★ 使用轉換後的 Base64 資料，解決跨域不顯示問題
+        img.src = bgSrc;
+
         img.onerror = () => { 
-            console.error('Image failed to load'); 
+            console.error('Image failed to load in DOM'); 
             img.src = 'https://placehold.co/720x1280/eeeeee/333333?text=背景圖載入失敗'; 
         };
         itemDiv.appendChild(img);
@@ -480,110 +481,64 @@ function applyFilter(){
         const contentBlock = document.createElement("div");
         contentBlock.className = "content-block";
 
-        // ★ 標題兩行文字處理 (日期 / 仙佛與班期)，計算長度以進行垂直對齊 ★
-        
+        // --- 文字處理邏輯 (保持不變) ---
         let dateLineText = '';
         if(row["日期"]) {
-            // 日期行：開頭一個半形空格
             dateLineText = `${row["日期"]}`; 
         }
         
         let deityCourseLineText = '';
         if(row["仙佛"] || row["班期"]){
-            let text = ""; // 仙佛行：開頭一個全形空格，用於與日期行區隔
+            let text = ""; 
             if(row["仙佛"]) text += row["仙佛"];
             if(row["班期"]) text += `慈悲於${row["班期"]}`;
             deityCourseLineText = text;
         }
 
-        // 找出兩行文字中最長的視覺長度（以字數計）作為對齊的目標長度
         const finalMaxLen = Math.max(dateLineText.length, deityCourseLineText.length);
-        // 如果最長長度小於最小目標長度 (15)，則使用最小目標長度確保基礎寬度
         const targetLen = finalMaxLen > 1 ? finalMaxLen : ALIGN_MIN_TARGET_LEN;
 
-        // 初始化最終內容字串 
         let finalContentString = "\n"; 
-        
-        // 1. 日期行：應用對齊函式，並加上換行符 (\n)
         finalContentString += generateAlignedSpan(dateLineText, targetLen) + '\n';
-
-        // 2. 仙佛與班期行：應用對齊函式，並加上換行符 (\n)
         finalContentString += generateAlignedSpan(deityCourseLineText, targetLen) + '\n';
 
-
         const name = row["姓名"] || "";
-        const content = row["內容"] || ""; // 獲取原始內容
-        
-        // ★ 內容文字縮排邏輯：確保內容與前面的標題有固定間隔 ★
-        const FIXED_TOTAL_INDENT = 7; // 固定總縮排字元數 (從最右側列開始計算的縮排，包括姓名和分隔符號)
-        
-        // 1. 計算 namePrefix (姓名) 前需要的縮排 (indentString)
-        const nameAndSeparatorLength = name.length + 1; // 姓名長度 + 1 (分隔符號 '|')
-        // 需要在姓名之前填充的空格數
+        const content = row["內容"] || ""; 
+        const FIXED_TOTAL_INDENT = 7; 
+        const nameAndSeparatorLength = name.length + 1; 
         const requiredPrefixSpaces = Math.max(0, FIXED_TOTAL_INDENT - nameAndSeparatorLength);
-        
-        const indentString = "　".repeat(requiredPrefixSpaces); // 產生前綴的全形縮排
-        
-        // 姓名行（例如：　蔡廣生|） - 位於內容區塊第一列的前綴
+        const indentString = "　".repeat(requiredPrefixSpaces); 
         const namePrefix = name ? `${indentString}${name}|` : "";
 
-        // 設定每行最大字數，避免超出直式高度 (1280px)
         const maxCharsPerLine = 19; 
-        // 呼叫斷行函式，處理原始內容中的換行和長度限制
         const wrappedContent = forceVerticalLineBreak(content, maxCharsPerLine);
-        const lines = wrappedContent.split("\n"); // 獲取所有處理後的行
+        const lines = wrappedContent.split("\n"); 
 
-        // 2. 計算後續內容行的縮排字元串 (固定 8 格)
         const totalIndent = FIXED_TOTAL_INDENT;
         const contentIndentString = "　".repeat(totalIndent);
 
         let formatted = "";
         lines.forEach((line, i)=>{
-            if(i===0) {
-                // 內容的第一行直接接在 namePrefix 後面 (在同一列)
-                formatted += line; 
-            }
-            else {
-                // 第二行及以後的內容需要換行 (\n) (換到下一列) 
-                // 並加入標準的內容縮排 (8 格) (從頂部垂直方向的縮排)
-                formatted += '\n' + contentIndentString + line;
-            }
+            if(i===0) { formatted += line; }
+            else { formatted += '\n' + contentIndentString + line; }
         });
 
-        // 將標頭、姓名和主要內容組合成完整的 HTML 字串
         let finalHTML = finalContentString + namePrefix + formatted;
 
-        /* 區域文字處理 (位於內容結尾) */
         if(row["區域"]){
-            // 取得實際內容的最後一行，用於判斷是否還有空間容納區域文字
             const lastContentLine = lines[lines.length - 1] || '';
             const lastLineLength = lastContentLine.length; 
-            
-            const maxCharsForSameLine = 15; // 臨界值：最後一行字數超過 15 則換列 (預留空間)
-
+            const maxCharsForSameLine = 14; 
             let prefix = ''; 
-            
-            // 1. 如果最後一行字數 > 15 (空間不足，需要換到下一列/新行)
-            if (lastLineLength > maxCharsForSameLine) {
-                // 換行 (\n)，並加入標準的內容縮排 (8 格)
-                prefix = '\n' + contentIndentString; 
-            } 
-            // 2. 如果最後一行字數 <= 15 (空間足夠，接在同一列/行後面)
-            else {
-                // 在同一列/行接續，只需要一個全形空格來分隔內容和區域
-                prefix = ''; 
-            }
-
-            // 將區域內容用 span 包裹並應用 .small-text 類別 (較小的字體)
+            if (lastLineLength > maxCharsForSameLine) { prefix = '\n' + contentIndentString; } 
+            else { prefix = ''; }
             const areaHtml = `<span class="small-text">（${row["區域"]}）</span>`;
-
-            // 將區域文字附加到內容的尾部
             finalHTML += `${prefix}${areaHtml}`; 
         }
 
-        // 將組裝好的 HTML 內容設置到內容區塊
         contentBlock.innerHTML = finalHTML;
         itemDiv.appendChild(contentBlock);
+        // --- 文字處理結束 ---
 
         /* 單一下載按鈕 */
         const btnWrapper = document.createElement("div");
@@ -593,46 +548,46 @@ function applyFilter(){
         btn.textContent="下載 PNG";
 
         const filename=`${row["姓名"]||"未知"}-${row["區域"]||"未知"}`;
-        // 設定單個按鈕的點擊事件，呼叫 generateImage 函式
         btn.onclick=()=>generateImage(itemDiv, filename);
 
         btnWrapper.appendChild(btn);
         itemDiv.appendChild(btnWrapper);
 
         resultsContainer.appendChild(itemDiv);
-        // 儲存待下載項目資訊，供下載全部功能使用
         downloadableItems.push({element:itemDiv, filename});
     });
 }
 
 /**
  * 截圖並下載單個圖片 (用於單一按鈕)
- * @param {HTMLElement} element 要截圖的 DOM 元素
- * @param {string} filename 儲存檔名
- * @param {function():void} callback 下載完成後的回調函數
  */
 async function generateImage(element, filename, callback=()=>{}){
-    // 截圖前暫時隱藏下載按鈕，避免按鈕出現在圖片中
     const hideBtn = element.querySelector('.download-button-wrapper');
     if(hideBtn) hideBtn.style.display='none';
 
     try {
-        // 使用 htmlToImage.toPng 將 DOM 元素轉換為 PNG 圖片的 Base64 URL
-        const dataUrl = await htmlToImage.toPng(element);
-        // 建立一個隱藏的 <a> 標籤來觸發下載
-        const a=document.createElement('a');
-        a.href=dataUrl;
-        a.download=filename + ".png";
-        document.body.appendChild(a);
-        a.click(); // 觸發下載
-        document.body.removeChild(a);
+        // 設定更嚴格的截圖參數
+        const options = {
+            quality: 0.95,
+            useCORS: true, // 強制開啟 CORS 支援
+            allowTaint: true, // 允許污染 (搭配 Base64 使用效果佳)
+            backgroundColor: '#ffffff' // 設定白色背景作為保底
+        };
+
+        const blob = await htmlToImage.toBlob(element, options);
+        
+        if (blob) {
+            saveAs(blob, filename + ".png");
+        } else {
+            throw new Error('無法生成圖片 Blob');
+        }
+        
         callback();
     } catch(e){
         console.error("生成圖片失敗:", e);
         displayMessage(`生成圖片失敗: ${e.message}`, true); 
         callback();
     } finally {
-        // 截圖後恢復顯示下載按鈕
         if(hideBtn) hideBtn.style.display='block';
     }
 }
@@ -646,56 +601,44 @@ async function downloadAllImages(){
     downloadAllBtn.disabled=true;
     displayMessage("開始打包 ZIP 檔案，請稍候...");
 
-    // 1. 初始化 JSZip
     const zip = new JSZip();
-    const folder = zip.folder("generated_images"); // 在 ZIP 內建立一個資料夾
-    // 簡單的延遲函式，避免瀏覽器在短時間內處理大量 DOM-to-Image 任務而卡住
+    const folder = zip.folder("generated_images"); 
     const delay = ms => new Promise(r=>setTimeout(r, ms));
 
     try {
-        // 2. 依序生成圖片 Blob 並加入 ZIP 檔案
         for(let i=0;i<downloadableItems.length;i++){
             const item = downloadableItems[i];
-            // 截圖前暫時隱藏下載按鈕
             const hideBtn = item.element.querySelector('.download-button-wrapper');
             if(hideBtn) hideBtn.style.display='none';
 
             displayMessage(`處理中：${item.filename}.png (${i+1}/${downloadableItems.length})`);
             
-            // 使用 htmlToImage.toBlob 取得圖片的 Blob 資料
-            const imageBlob = await htmlToImage.toBlob(item.element, {
-                quality: 0.95 // 設置圖片品質，95%
-            });
+            // 同步更新下載全部的選項
+            const options = {
+                quality: 0.95,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff'
+            };
 
-            // 將 Blob 資料加入 ZIP 檔案，使用檔案名稱作為鍵
+            const imageBlob = await htmlToImage.toBlob(item.element, options);
             folder.file(`${item.filename}.png`, imageBlob);
 
-            // 截圖後恢復顯示下載按鈕
             if(hideBtn) hideBtn.style.display='block';
-            
-            // 暫停 500ms，給予瀏覽器緩衝和渲染時間
             await delay(500); 
         }
 
-        // 3. 生成 ZIP 檔案 (Blob)
         displayMessage("正在壓縮檔案...");
-        // 壓縮選項：type: "blob" 生成二進位大對象
         const zipBlob = await zip.generateAsync({type: "blob"});
-
-        // 4. 使用 FileSaver.js 觸發下載
         saveAs(zipBlob, "試算表圖檔輸出.zip");
-
         displayMessage("ZIP 檔案下載完成！");
     } catch(e) {
         console.error("生成 ZIP 失敗:", e);
         displayMessage(`生成 ZIP 失敗: ${e.message}`, true);
     } finally {
-        // 無論成功或失敗，最後都要啟用按鈕
         downloadAllBtn.disabled=false;
     }
 }
 </script>
 </body>
 </html>
-
-
