@@ -547,7 +547,7 @@ async function applyFilter(){
         btn.className="btn-style";
         btn.textContent="下載 PNG";
 
-        const filename=`${row["姓名"]||"未知"}-${row["區域"]||"未知"}`;
+        const filename=`${row["姓名"]||"未知"}-${row["區域"]||" "}`;
         btn.onclick=()=>generateImage(itemDiv, filename);
 
         btnWrapper.appendChild(btn);
@@ -642,4 +642,5 @@ async function downloadAllImages(){
 </script>
 </body>
 </html>
+
 
