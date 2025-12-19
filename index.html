@@ -243,7 +243,7 @@ select, button, input[type="number"] {
 // Google Apps Script 部署的 URL，用於從 Google Sheets 獲取 JSON 資料
 const GS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzPsok1XF4E4PQEmckvxK3pY8GPI1GeTrceC5Oz5deQbDMvmgtJxd1e-WcIV4GjgxZV3g/exec';
 // 背景圖片的原始網址
-const BG_IMAGE_URL = 'https://chy0205.github.io/1110/1201.png';
+const BG_IMAGE_URL = './1201.png';
 
 // ★ 模擬資料 (如果外部 Google Sheet 載入失敗時使用) ★
 const MOCK_DATA = [
@@ -443,7 +443,7 @@ function populateFilterValues(data, fieldKey){
 // 頁面載入後初始化
 document.addEventListener('DOMContentLoaded', async()=>{
     // 預先偷偷開始載入背景圖，加快稍後的速度
-    preloadBackground(); 
+    //preloadBackground(); 
 
     const initializeData = async () => {
         // 確保資料載入，無論是來自外部還是模擬
@@ -492,10 +492,7 @@ async function applyFilter(){
         return;
     }
 
-    displayMessage('正在準備圖片資源...');
-    
-    // ★ 關鍵步驟：確保背景圖片已轉換為 Base64
-    const bgSrc = await preloadBackground();
+    displayMessage(`找到 ${filtered.length} 筆資料`);
 
     displayMessage(`找到 ${filtered.length} 筆資料`);
     downloadAllBtn.disabled=false;
@@ -524,10 +521,7 @@ async function applyFilter(){
         /* 圖片（背景圖） */
         const img = document.createElement("img");
         img.className = "result-img";
-        img.setAttribute('crossOrigin', 'anonymous'); // 保持這個，雙重保險
-        
-        // ★ 使用轉換後的 Base64 資料，解決跨域不顯示問題
-        img.src = bgSrc;
+        img.src = BG_IMAGE_URL;
 
         img.onerror = () => { 
             console.error('Image failed to load in DOM'); 
@@ -747,8 +741,6 @@ async function generateImage(element, filename, callback=()=>{}){
         // 設定更嚴格的截圖參數
         const options = {
             quality: 0.95,
-            useCORS: true, // 強制開啟 CORS 支援
-            allowTaint: true, // 允許污染 (搭配 Base64 使用效果佳)
             backgroundColor: '#ffffff' // 設定白色背景作為保底
         };
 
@@ -820,3 +812,4 @@ async function downloadAllImages(){
 </script>
 </body>
 </html>
+
