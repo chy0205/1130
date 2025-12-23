@@ -281,24 +281,44 @@ async function applyFilter() {
             }
         }
 
-        mainBlock.innerHTML = finalContentHtml;
-        wrap.appendChild(mainBlock);
 
-        // 下載按鈕
-        const btnWrap = document.createElement('div');
-        btnWrap.className = 'download-button-wrapper';
-        const btn = document.createElement('button');
-        btn.className = 'btn-primary';
-        btn.innerText = "下載 PNG";
-        btn.onclick = () => saveSingle(wrap, `${row['姓名']}-${row['區域']}`);
-        btnWrap.appendChild(btn);
-        wrap.appendChild(btnWrap);
+        // 執行首次渲染
+        renderMainContent(defaultFontSize);
+
+        // 控制面板 (僅預覽時可見，下載時會隱藏)
+        const overlay = document.createElement('div');
+        overlay.className = 'card-editor-overlay';
+        
+        const sizeLabel = document.createElement('label');
+        sizeLabel.innerHTML = `字體大小: <span class="font-val">${defaultFontSize}</span> px`;
+        
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = 20;
+        slider.max = 65;
+        slider.value = defaultFontSize;
+        slider.oninput = (e) => {
+            const val = e.target.value;
+            sizeLabel.querySelector('.font-val').innerText = val;
+            renderMainContent(parseInt(val));
+        };
+
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'btn-primary';
+        dlBtn.innerText = "下載此張 PNG";
+        dlBtn.onclick = () => saveSingle(wrap, `${row['姓名'] || '無名'}-${row['區域'] || '無區域'}`);
+
+        overlay.appendChild(sizeLabel);
+        overlay.appendChild(slider);
+        overlay.appendChild(dlBtn);
+        wrap.appendChild(overlay);
 
         container.appendChild(wrap);
-        itemsToDownload.push({ el: wrap, name: `${row['姓名']}-${row['區域']}` });
+        itemsToDownload.push({ element: wrap, filename: `${row['姓名'] || '無名'}-${row['區域'] || '無區域'}` });
     });
     
-    document.getElementById('downloadAllBtn').disabled = false;
+    document.getElementById('downloadAllBtn').disabled = (filtered.length === 0);
+    document.getElementById('messageBox').innerHTML = `✅ 已生成 ${filtered.length} 張小卡，可個別調整後下載。`;
 }
 
 // iOS 穩定版下載函數
@@ -374,6 +394,7 @@ window.onload = init;
 
 </body>
 </html>
+
 
 
 
