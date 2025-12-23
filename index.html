@@ -379,7 +379,7 @@ async function applyFilter() {
         const btn = document.createElement('button');
         btn.className = 'btn-style';
         btn.textContent = '下載圖檔';
-        const fName = `${name || '聖訓'}_${idx}`;
+        const fName = `${row["姓名"]||"未知"}-${row["區域"]||"未知"}`;
         btn.onclick = () => saveImage(item, fName);
         wrap.appendChild(btn);
         item.appendChild(wrap);
@@ -440,3 +440,4 @@ async function downloadAllImages() {
 </script>
 </body>
 </html>
+
