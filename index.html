@@ -302,47 +302,71 @@ async function applyFilter() {
 }
 
 // iOS 穩定版下載函數
-async function saveSingle(el, name) {
+async function saveImage(el, name) {
     const btn = el.querySelector('.download-button-wrapper');
-    btn.style.visibility = "hidden";
+    btn.style.display = 'none';
+    
+    const options = { 
+        quality: 1.0, 
+        pixelRatio: 2, 
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        // ★ 重點：強制重設縮放與邊距，確保擷取到的是原始大小
+        style: {
+            transform: 'scale(1)',
+            margin: '0',
+            left: '0',
+            top: '0'
+        }
+    };
     
     try {
-        const dataUrl = await htmlToImage.toPng(el, {
-            pixelRatio: 2, 
-            cacheBust: true,
-            allowTaint: false,
-            backgroundColor: '#ffffff'
-        });
-        saveAs(dataUrl, `${name}.png`);
+        const blob = await htmlToImage.toBlob(el, options);
+        saveAs(blob, `${name}.png`);
     } catch (e) {
         console.error(e);
-        alert("截圖失敗，請稍後再試。");
+        updateMessage("導出失敗", "red");
     } finally {
-        btn.style.visibility = "visible";
+        btn.style.display = 'block';
     }
 }
 
 async function downloadAllImages() {
-    const btn = document.getElementById('downloadAllBtn');
-    btn.disabled = true;
-    btn.innerText = "下載中...";
+    const btnAll = document.getElementById('downloadAllBtn');
+    btnAll.disabled = true;
+    updateMessage("正在打包 ZIP...", "orange");
     
     const zip = new JSZip();
-    
-    for (const item of itemsToDownload) {
-        item.el.querySelector('.download-button-wrapper').style.visibility = "hidden";
-        // 打包時稍微降低 pixelRatio 以節省記憶體，防止 iOS 瀏覽器閃退
-        const dataUrl = await htmlToImage.toPng(item.el, { pixelRatio: 1.5, cacheBust: true });
-        const base64Data = dataUrl.split(',')[1];
-        zip.file(`${item.name}.png`, base64Data, {base64: true});
-        item.el.querySelector('.download-button-wrapper').style.visibility = "visible";
+    // ★ 加入 style 重設
+    const options = { 
+        quality: 0.95, 
+        pixelRatio: 2, 
+        backgroundColor: '#ffffff',
+        style: {
+            transform: 'scale(1)',
+            margin: '0',
+            left: '0',
+            top: '0'
+        }
+    };
+
+    for (const [idx, item] of downloadableItems.entries()) {
+        const btn = item.element.querySelector('.download-button-wrapper');
+        btn.style.display = 'none';
+        try {
+            const blob = await htmlToImage.toBlob(item.element, options);
+            zip.file(`${item.filename}.png`, blob);
+        } catch (err) {
+            console.error(err);
+        }
+        btn.style.display = 'block';
+        updateMessage(`進度: ${idx + 1}/${downloadableItems.length}`);
     }
     
-    const content = await zip.generateAsync({type:"blob"});
+    const content = await zip.generateAsync({ type: "blob" });
     saveAs(content, "聖訓小卡.zip");
-    
-    btn.disabled = false;
-    btn.innerText = "下載 ZIP";
+    btnAll.disabled = false;
+    updateMessage("下載完成", "green");
 }
 
 window.onload = init;
@@ -350,3 +374,4 @@ window.onload = init;
 
 </body>
 </html>
+
