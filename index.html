@@ -82,6 +82,20 @@ select, input, button {
 /* 對齊用 Span */
 .content-block span { display: inline-block; }
 
+/* 個別調整面板 */
+.card-editor-overlay {
+  position: absolute; bottom: 20px; left: 20px; z-index: 10;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 12px; border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; gap: 8px;
+  width: 180px; border: 1px solid #ddd;
+  writing-mode: horizontal-tb; /* 強制橫向顯示 */
+  }
+.card-editor-overlay label { margin: 0; color: #333; font-size: 0.8rem; }
+.card-editor-overlay input[type="range"] { cursor: pointer; }
+.card-editor-overlay .font-val { font-family: sans-serif; font-weight: bold; color: #d9534f; }
+
 /* 下載按鈕包裝器 (截圖時會隱藏) */
 .download-button-wrapper {
     position: absolute; bottom: 25px; left: 25px; z-index: 10;
@@ -323,8 +337,9 @@ async function applyFilter() {
 
 // iOS 穩定版下載函數
 async function saveSingle(el, name) {
-    const btn = el.querySelector('.download-button-wrapper');
-    btn.style.display = 'none';
+const overlay = el.querySelector('.card-editor-overlay');
+    overlay.style.display = 'none'; // 隱藏按鈕區
+    
     
     const options = { 
         quality: 1.0, 
@@ -394,6 +409,7 @@ window.onload = init;
 
 </body>
 </html>
+
 
 
 
