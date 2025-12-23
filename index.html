@@ -400,18 +400,26 @@ async function applyFilter() {
 async function saveImage(el, name) {
     const btn = el.querySelector('.download-button-wrapper');
     btn.style.display = 'none';
+    
     const options = { 
         quality: 1.0, 
         pixelRatio: 2, 
         backgroundColor: '#ffffff',
         useCORS: true,
-        allowTaint: false,
-        cacheBust: true
+        // ★ 重點：強制重設縮放與邊距，確保擷取到的是原始大小
+        style: {
+            transform: 'scale(1)',
+            margin: '0',
+            left: '0',
+            top: '0'
+        }
     };
+    
     try {
         const blob = await htmlToImage.toBlob(el, options);
         saveAs(blob, `${name}.png`);
     } catch (e) {
+        console.error(e);
         updateMessage("導出失敗", "red");
     } finally {
         btn.style.display = 'block';
@@ -422,16 +430,34 @@ async function downloadAllImages() {
     const btnAll = document.getElementById('downloadAllBtn');
     btnAll.disabled = true;
     updateMessage("正在打包 ZIP...", "orange");
+    
     const zip = new JSZip();
-    const options = { quality: 0.95, pixelRatio: 2, backgroundColor: '#ffffff' };
+    // ★ 加入 style 重設
+    const options = { 
+        quality: 0.95, 
+        pixelRatio: 2, 
+        backgroundColor: '#ffffff',
+        style: {
+            transform: 'scale(1)',
+            margin: '0',
+            left: '0',
+            top: '0'
+        }
+    };
+
     for (const [idx, item] of downloadableItems.entries()) {
         const btn = item.element.querySelector('.download-button-wrapper');
         btn.style.display = 'none';
-        const blob = await htmlToImage.toBlob(item.element, options);
-        zip.file(`${item.filename}.png`, blob);
+        try {
+            const blob = await htmlToImage.toBlob(item.element, options);
+            zip.file(`${item.filename}.png`, blob);
+        } catch (err) {
+            console.error(err);
+        }
         btn.style.display = 'block';
         updateMessage(`進度: ${idx + 1}/${downloadableItems.length}`);
     }
+    
     const content = await zip.generateAsync({ type: "blob" });
     saveAs(content, "聖訓小卡.zip");
     btnAll.disabled = false;
@@ -440,5 +466,6 @@ async function downloadAllImages() {
 </script>
 </body>
 </html>
+
 
 
