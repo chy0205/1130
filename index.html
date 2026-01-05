@@ -315,13 +315,13 @@ async function applyFilter() {
             <input type="range" min="34" max="60" value="${initialFontSize}" 
                    oninput="updateCardFontSize(${index}, this.value)">
             <div class="download-button-wrapper">
-                <button class="btn-primary" style="width:100%" onclick="saveSingle(this.closest('.result-item'), '${row['姓名']}-${row['區域']}')">單張下載 PNG</button>
+                <button class="btn-primary" style="width:100%" onclick="saveSingle(this.closest('.result-item'), '${row['區域']}-${row['姓名']}')">單張下載 PNG</button>
             </div>
         `;
         wrap.appendChild(uiOverlay);
 
         container.appendChild(wrap);
-        itemsToDownload.push({ el: wrap, name: `${row['姓名']}-${row['區域']}`, data: row });
+        itemsToDownload.push({ el: wrap, name: `${row['區域']}-${row['姓名']}`, data: row });
     });
     
     document.getElementById('downloadAllBtn').disabled = false;
@@ -379,3 +379,4 @@ window.onload = init;
 
 </body>
 </html>
+
